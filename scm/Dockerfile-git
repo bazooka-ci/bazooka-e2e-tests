@@ -1,0 +1,17 @@
+FROM alpine:3.1
+
+RUN apk --update add git-daemon openssh bash perl
+
+RUN git config --global user.email "squirrel@bazooka-ci.io"  && \
+	git config --global user.name "Squirrel Holding-a-Bazooka"
+
+RUN echo "    IdentityFile /bazooka-key" >> /etc/ssh/ssh_config
+RUN echo "    StrictHostKeyChecking no" >> /etc/ssh/ssh_config
+
+VOLUME /repo
+
+WORKDIR /repo
+
+EXPOSE 9418
+
+CMD git daemon --verbose --export-all --base-path=/repo/.git --reuseaddr --strict-paths /repo/.git/
