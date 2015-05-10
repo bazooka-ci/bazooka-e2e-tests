@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
 	"testing"
+	"text/template"
 
 	dockercmd "github.com/bywan/go-dockercommand"
 )
@@ -120,6 +122,30 @@ func (r *Repository) ImportDir(src string) {
 		return nil
 	}); err != nil {
 		r.t.Fatalf("Error while importing dir %s: %v", src, err)
+	}
+}
+
+func (r *Repository) Render(file string, model map[string]interface{}) {
+	fullPath := path.Join(r.location, file)
+
+	b, err := ioutil.ReadFile(fullPath)
+	if err != nil {
+		r.t.Fatalf("Error while reading %s: %v", file, err)
+	}
+
+	tpl, err := template.New("_").Parse(string(b))
+	if err != nil {
+		r.t.Fatalf("Error while parsing template %s: %v", file, err)
+	}
+
+	out, err := os.OpenFile(fullPath, os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		r.t.Fatalf("Error while opening %s for write: %v", file, err)
+	}
+	defer out.Close()
+
+	if err := tpl.Execute(out, model); err != nil {
+		r.t.Fatalf("Error while executing the template %s: %v", file, err)
 	}
 }
 

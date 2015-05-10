@@ -1,0 +1,7 @@
+language: golang
+
+go:
+  - "1.4"
+
+env:
+  - secure: {{.Secure}}
