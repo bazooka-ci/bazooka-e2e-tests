@@ -1,0 +1,3 @@
+language: golang
+env:
+  - PARAM=666
