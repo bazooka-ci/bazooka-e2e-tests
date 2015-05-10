@@ -15,6 +15,12 @@ import (
 	dockercmd "github.com/bywan/go-dockercommand"
 )
 
+var (
+	tempDir    string
+	dockerSock string
+	serverHost string
+)
+
 type Bzk struct {
 	Api *client.Client
 

@@ -6,12 +6,6 @@ import (
 	"testing"
 )
 
-var (
-	tempDir    string
-	dockerSock string
-	serverHost string
-)
-
 func TestMain(m *testing.M) {
 	tempDir = os.Getenv("BZK_E2E_TEMP")
 	if len(tempDir) == 0 {
