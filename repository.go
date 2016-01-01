@@ -26,9 +26,9 @@ type Repository struct {
 
 	location string
 
-	dockerClient *dockercmd.Docker
-	container    *dockercmd.Container
-	port         string
+	dockerClient  *dockercmd.Docker
+	container     *dockercmd.Container
+	containerName string
 }
 
 func (b *Bzk) NewRepository() *Repository {
@@ -52,14 +52,16 @@ func (b *Bzk) NewRepository() *Repository {
 
 	repo.cmd("git", "init")
 
+	repo.containerName = fmt.Sprintf("bzk_repo_e2e_%d_%d", index, b.ts)
 	b.t.Logf("Starting a git server instance for repository %d", index)
 	container, err := b.dockerClient.Run(&dockercmd.RunOptions{
+		Name:   repo.containerName,
 		Image:  "bazooka/e2e-git",
 		Detach: true,
 		VolumeBinds: []string{
 			fmt.Sprintf("%s:/repo", location),
 		},
-		PublishAllPorts: true,
+		NetworkMode: NET_NAME,
 	})
 	if err != nil {
 		b.t.Fatalf("Failed to create the git server container for repository %d: %v", index, err)
@@ -67,10 +69,7 @@ func (b *Bzk) NewRepository() *Repository {
 	b.t.Logf("Started a git server instance for repository %d, id: %s", index, container.ID())
 	repo.ContainerLog("<git-srv>", container)
 
-	port := b.getHostPort(container, "9418/tcp")
-
 	repo.container = container
-	repo.port = port
 
 	b.repos = append(b.repos, repo)
 	return repo
@@ -92,7 +91,7 @@ func (r *Repository) teardown() {
 }
 
 func (r *Repository) CloneURL() string {
-	return fmt.Sprintf("git://%s:%s/", "boot2docker", r.port)
+	return fmt.Sprintf("git://%s:9418/", r.containerName)
 }
 
 func (r *Repository) ImportFile(src, dst string) {
@@ -156,7 +155,8 @@ func (r *Repository) cmd(cmd ...string) {
 		VolumeBinds: []string{
 			fmt.Sprintf("%s:/repo", r.location),
 		},
-		Cmd: cmd,
+		NetworkMode: NET_NAME,
+		Cmd:         cmd,
 	})
 
 	if err != nil {

@@ -25,5 +25,17 @@ func TestMain(m *testing.M) {
 		os.Exit(-1)
 	}
 
+	apiPort = os.Getenv("BZK_E2E_API_PORT")
+	if len(apiPort) == 0 {
+		fmt.Printf("$BZK_E2E_API_PORT must be set to the host port to which the test bazooka server will listen to API requests\n")
+		os.Exit(-1)
+	}
+
+	syslogPort = os.Getenv("BZK_E2E_SYSLOG_PORT")
+	if len(syslogPort) == 0 {
+		fmt.Printf("$BZK_E2E_SYSLOG_PORT must be set to the host port to which the test bazooka server will listen to syslog requests\n")
+		os.Exit(-1)
+	}
+
 	os.Exit(m.Run())
 }

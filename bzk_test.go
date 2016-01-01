@@ -27,7 +27,19 @@ func TestSimpleGoProject(t *testing.T) {
 	require.NoError(t, err, "job creation failed")
 	t.Logf("Started job: %v", job)
 
-	jobStatus := bzk.WaitForJob(job.ID, 60*time.Second)
+	jobStatus, err := bzk.WaitForJob(job.ID, 40*time.Second)
+
+	if err != nil {
+		logs, lerr := bzk.Api.Job.Log(job.ID)
+		if lerr != nil {
+			t.Fatalf("Error retrieving job logs: %v. Original error: %v", lerr, err)
+		}
+		for _, l := range logs {
+			t.Log(l)
+		}
+
+		t.Fatal(err)
+	}
 
 	require.Equal(t, lib.JOB_SUCCESS, jobStatus)
 
@@ -58,7 +70,11 @@ func TestSimpleJavaProject(t *testing.T) {
 	require.NoError(t, err, "job creation failed")
 	t.Logf("Started job: %v", job)
 
-	jobStatus := bzk.WaitForJob(job.ID, 60*time.Second)
+	jobStatus, err := bzk.WaitForJob(job.ID, 180*time.Second)
+
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	require.Equal(t, lib.JOB_SUCCESS, jobStatus)
 
@@ -89,7 +105,11 @@ func TestSimplePythonProject(t *testing.T) {
 	require.NoError(t, err, "job creation failed")
 	t.Logf("Started job: %v", job)
 
-	jobStatus := bzk.WaitForJob(job.ID, 60*time.Second)
+	jobStatus, err := bzk.WaitForJob(job.ID, 60*time.Second)
+
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	require.Equal(t, lib.JOB_SUCCESS, jobStatus)
 
@@ -120,7 +140,11 @@ func TestSimpleNodejsProject(t *testing.T) {
 	require.NoError(t, err, "job creation failed")
 	t.Logf("Started job: %v", job)
 
-	jobStatus := bzk.WaitForJob(job.ID, 60*time.Second)
+	jobStatus, err := bzk.WaitForJob(job.ID, 60*time.Second)
+
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	require.Equal(t, lib.JOB_SUCCESS, jobStatus)
 

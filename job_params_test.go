@@ -26,7 +26,11 @@ func TestJobParameters(t *testing.T) {
 	require.NoError(t, err, "job creation failed")
 	t.Logf("Started job: %v", job)
 
-	jobStatus := bzk.WaitForJob(job.ID, 60*time.Second)
+	jobStatus, err := bzk.WaitForJob(job.ID, 60*time.Second)
+
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	require.Equal(t, lib.JOB_SUCCESS, jobStatus)
 }
@@ -48,7 +52,11 @@ func TestJobParametersOverrideEnv(t *testing.T) {
 	require.NoError(t, err, "job creation failed")
 	t.Logf("Started job: %v", job)
 
-	jobStatus := bzk.WaitForJob(job.ID, 60*time.Second)
+	jobStatus, err := bzk.WaitForJob(job.ID, 60*time.Second)
+
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	require.Equal(t, lib.JOB_SUCCESS, jobStatus)
 }
