@@ -41,11 +41,16 @@ type Bzk struct {
 	dockerSock string
 	scmKey     string
 
-	dockerClient        *dockercmd.Docker
-	mongoContainer      *dockercmd.Container
-	serverContainer     *dockercmd.Container
+	dockerClient    *dockercmd.Docker
+	queueContainer  *dockercmd.Container
+	mongoContainer  *dockercmd.Container
+	serverContainer *dockercmd.Container
+	workerContainer *dockercmd.Container
+
+	queueContainerName  string
 	mongoContainerName  string
 	serverContainerName string
+	workerContainerName string
 
 	repos []*Repository
 }
@@ -75,9 +80,10 @@ func NewBazooka(t *testing.T) *Bzk {
 
 	bzk.createNetwork()
 
+	bzk.startQueue()
 	bzk.startMongo()
-	// time.Sleep(5 * time.Second)
 	bzk.startServer()
+	bzk.startWorker()
 
 	timeout := 20 * time.Second
 	if err := lib.WaitForTcpConnection(fmt.Sprintf("%s:%s", serverHost, apiPort), 100*time.Millisecond, timeout); err != nil {
@@ -112,7 +118,23 @@ func (b *Bzk) Teardown() {
 		b.t.Errorf("Error while deleting bazooka home directory: %v", err)
 	}
 
+	b.t.Logf("Removing the queue container")
+	if err := b.queueContainer.Remove(&dockercmd.RemoveOptions{
+		Force:         true,
+		RemoveVolumes: true,
+	}); err != nil {
+		b.t.Errorf("Error while stopping queue container: %v", err)
+	}
+
 	b.t.Logf("Removing the mongo container")
+	if err := b.mongoContainer.Remove(&dockercmd.RemoveOptions{
+		Force:         true,
+		RemoveVolumes: true,
+	}); err != nil {
+		b.t.Errorf("Error while stopping mongo container: %v", err)
+	}
+
+	b.t.Logf("Removing the server container")
 	if err := b.serverContainer.Remove(&dockercmd.RemoveOptions{
 		Force:         true,
 		RemoveVolumes: true,
@@ -120,12 +142,12 @@ func (b *Bzk) Teardown() {
 		b.t.Errorf("Error while stopping server container: %v", err)
 	}
 
-	b.t.Logf("Removing the server container")
-	if err := b.mongoContainer.Remove(&dockercmd.RemoveOptions{
+	b.t.Logf("Removing the worker container")
+	if err := b.workerContainer.Remove(&dockercmd.RemoveOptions{
 		Force:         true,
 		RemoveVolumes: true,
 	}); err != nil {
-		b.t.Errorf("Error while stopping mongo container: %v", err)
+		b.t.Errorf("Error while stopping worker container: %v", err)
 	}
 
 	b.t.Logf("Tearing down repositories")
@@ -161,27 +183,14 @@ func (b *Bzk) startServer() {
 	b.serverContainerName = fmt.Sprintf("bzk_server_e2e_%d", b.ts)
 
 	envMap := map[string]string{
-		"BZK_HOME":       b.bzkHome,
-		"BZK_DOCKERSOCK": b.dockerSock,
-		"BZK_NETWORK":    NET_NAME,
-		"BZK_SYSLOG_URL": fmt.Sprintf("tcp://%s:%s", serverHost, syslogPort),
-		"BZK_API_URL":    fmt.Sprintf("http://%s:3000", b.serverContainerName),
-		"BZK_DB_URL":     fmt.Sprintf("%s:27017", b.mongoContainerName),
+		"BZK_DB_URL":    fmt.Sprintf("%s:27017", b.mongoContainerName),
+		"BZK_QUEUE_URL": fmt.Sprintf("%s:11300", b.queueContainerName),
 	}
-	if len(b.scmKey) > 0 {
-		envMap["BZK_SCM_KEYFILE"] = b.scmKey
-	}
-
-	b.t.Logf("mongo id=%s\n", b.mongoContainer.ID())
 
 	container, err := b.dockerClient.Run(&dockercmd.RunOptions{
-		Name:   b.serverContainerName,
-		Image:  fmt.Sprintf("bazooka/server:%s", b.tag),
-		Detach: true,
-		VolumeBinds: []string{
-			fmt.Sprintf("%s:/bazooka", b.bzkHome),
-			fmt.Sprintf("%s:/var/run/docker.sock", b.dockerSock),
-		},
+		Name:        b.serverContainerName,
+		Image:       fmt.Sprintf("bazooka/server:%s", b.tag),
+		Detach:      true,
 		Env:         envMap,
 		NetworkMode: NET_NAME,
 		PortBindings: map[docker.Port][]docker.PortBinding{
@@ -195,6 +204,45 @@ func (b *Bzk) startServer() {
 	b.t.Logf("Started a bazooka server instance")
 
 	b.serverContainer = container
+}
+
+func (b *Bzk) startWorker() {
+	b.t.Logf("Starting a bazooka worker instance")
+
+	b.workerContainerName = fmt.Sprintf("bzk_worker_e2e_%d", b.ts)
+
+	envMap := map[string]string{
+		"BZK_HOME":       b.bzkHome,
+		"BZK_DOCKERSOCK": b.dockerSock,
+		"BZK_NETWORK":    NET_NAME,
+		"BZK_SYSLOG_URL": fmt.Sprintf("tcp://%s:%s", serverHost, syslogPort),
+		"BZK_API_URL":    fmt.Sprintf("http://%s:3000", b.serverContainerName),
+		"BZK_DB_URL":     fmt.Sprintf("%s:27017", b.mongoContainerName),
+		"BZK_QUEUE_URL":  fmt.Sprintf("%s:11300", b.queueContainerName),
+	}
+	if len(b.scmKey) > 0 {
+		envMap["BZK_SCM_KEYFILE"] = b.scmKey
+	}
+
+	b.t.Logf("mongo id=%s\n", b.mongoContainer.ID())
+
+	container, err := b.dockerClient.Run(&dockercmd.RunOptions{
+		Name:   b.workerContainerName,
+		Image:  fmt.Sprintf("bazooka/worker:%s", b.tag),
+		Detach: true,
+		VolumeBinds: []string{
+			fmt.Sprintf("%s:/bazooka", b.bzkHome),
+			fmt.Sprintf("%s:/var/run/docker.sock", b.dockerSock),
+		},
+		Env:         envMap,
+		NetworkMode: NET_NAME,
+	})
+	if err != nil {
+		b.t.Fatalf("Failed to create the worker container: %v", err)
+	}
+	b.t.Logf("Started a bazooka worker instance")
+
+	b.workerContainer = container
 }
 
 func (b *Bzk) startMongo() {
@@ -214,6 +262,24 @@ func (b *Bzk) startMongo() {
 	}
 	b.t.Logf("Started a mongodb instance")
 	b.mongoContainer = container
+}
+
+func (b *Bzk) startQueue() {
+	b.t.Logf("Starting a queue instance")
+
+	b.queueContainerName = fmt.Sprintf("bzk_queue_e2e_%d", b.ts)
+
+	container, err := b.dockerClient.Run(&dockercmd.RunOptions{
+		Name:        b.queueContainerName,
+		Image:       "jawher/beanstalkd",
+		Detach:      true,
+		NetworkMode: NET_NAME,
+	})
+	if err != nil {
+		b.t.Fatalf("Failed to create a queue container: %v", err)
+	}
+	b.t.Logf("Started a queue instance")
+	b.queueContainer = container
 }
 
 func (b *Bzk) getHostPort(container *dockercmd.Container, port string) string {

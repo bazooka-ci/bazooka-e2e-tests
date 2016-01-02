@@ -21,7 +21,7 @@ func (b *Bzk) WaitForJob(jobID string, timeoutAfter time.Duration) (lib.JobStatu
 			switch {
 			case err != nil:
 				return "", fmt.Errorf("Error while getting the job %s status: %v", jobID, err)
-			case j.Status != lib.JOB_RUNNING:
+			case j.Status != lib.JOB_RUNNING && j.Status != lib.JOB_PENDING:
 				b.t.Logf("Job %s completed with status %v after %v", jobID, j.Status, time.Now().Sub(start))
 				return j.Status, nil
 			}
